@@ -156,6 +156,8 @@
         var hint = document.getElementById('tap-hint');
         var videoSrc = '/stream/T-SPORTS-HD/video.m3u8';
 
+        var isStarted = false;
+
         // Load stream using hls.js or Native Player (Safari)
         function initPlayer() {
             if (Hls.isSupported()) {
@@ -167,6 +169,11 @@
                 hls.loadSource(videoSrc);
                 hls.attachMedia(video);
                 
+                hls.on(Hls.Events.MANIFEST_LOADED, function(event, data) {
+                    // Force the stream to start loading at the highest quality level
+                    hls.startLevel = data.levels.length - 1;
+                });
+                
                 hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
                     // Force the absolute highest quality and disable auto-downgrade
                     var highestLevel = data.levels.length - 1;
@@ -175,7 +182,9 @@
                     hls.loadLevel = highestLevel;
                     
                     // Attempt autoplay (muted is highly allowed by all browsers)
-                    video.play().catch(function(e) {
+                    video.play().then(function() {
+                        isStarted = true;
+                    }).catch(function(e) {
                         console.log("Autoplay blocked:", e);
                     });
                 });
@@ -198,17 +207,28 @@
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = videoSrc;
                 video.addEventListener('loadedmetadata', function() {
-                    video.play().catch(function(e) {
+                    video.play().then(function() {
+                        isStarted = true;
+                    }).catch(function(e) {
                         console.log("Autoplay blocked:", e);
                     });
                 });
             }
         }
 
+        // Force play if paused (Always Play, No Pause Option)
+        video.addEventListener('pause', function() {
+            if (isStarted) {
+                video.play().catch(e => console.log(e));
+            }
+        });
+
         // 1-Click to Fullscreen, Unmute, and Auto-Rotate to Landscape
         container.addEventListener('click', function(e) {
             // Don't trigger if clicking on native controls
             if (e.target !== container && e.target !== video) return;
+
+            isStarted = true;
 
             // Unmute the video
             if (video.muted) {
