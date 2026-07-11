@@ -7,12 +7,12 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
-        
+
         #player-container {
             width: 100%; height: 100%;
             position: absolute; top: 0; left: 0;
         }
-        
+
         video {
             width: 100%; height: 100%;
             object-fit: contain;
@@ -20,19 +20,20 @@
             position: absolute;
             top: 0; left: 0;
         }
-        
+
         #credit {
             position: fixed;
-            bottom: 6px;
-            right: 10px;
-            color: rgba(255,255,255,0.25);
-            font-family: Arial;
-            font-size: 9px;
-            z-index: 10;
+            bottom: 8px;
+            right: 12px;
+            color: rgba(255,255,255,0.3);
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            z-index: 9999;
             pointer-events: none;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
         }
     </style>
-    
+
     <!-- Plyr CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
 </head>
@@ -45,165 +46,226 @@
 
     <!-- Plyr JS -->
     <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
+    <!-- Hls.js -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    
+
     <script>
-        const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
-        const STREAM_URL = atob(_k);
-        const video = document.getElementById('video');
-        let hls = null;
-        let player = null;
-        let clicked = false;
+        (function() {
+            const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
+            const STREAM_URL = atob(_k);
+            const video = document.getElementById('video');
+            let hls = null;
+            let player = null;
+            let currentLevel = 0;
+            let maxLevel = 0;
+            let stallRecoveryTimer = null;
+            let qualityLocked = false;
+            let clickedForFull = false;
 
-        function goFull() {
-            if (clicked) return;
-            clicked = true;
-            const el = document.documentElement;
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
-        }
-
-        function start() {
-            if (typeof Hls === 'undefined' || typeof Plyr === 'undefined') {
-                setTimeout(start, 300);
-                return;
+            // ১ ক্লিক = ফুলস্ক্রিন + ল্যান্ডস্কেপ (সাউন্ড আগে থেকেই চালু)
+            function goFullOnClick() {
+                if (clickedForFull) return;
+                clickedForFull = true;
+                const el = document.documentElement;
+                if (el.requestFullscreen) {
+                    el.requestFullscreen().catch(() => {});
+                } else if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen();
+                }
+                try {
+                    if (screen.orientation && screen.orientation.lock) {
+                        screen.orientation.lock('landscape').catch(() => {});
+                    }
+                } catch(e) {}
             }
 
-            if (Hls.isSupported()) {
-                hls = new Hls({
-                    autoStartLoad: true,
-                    startLevel: -1,
-                    capLevelToPlayerSize: false,
-                    maxBufferLength: 20,
-                    maxMaxBufferLength: 30,
-                    fragLoadingTimeOut: 30000,
-                    fragLoadingMaxRetry: 999,
-                    manifestLoadingMaxRetry: 999,
+            // অটো কোয়ালিটি কন্ট্রোল (ইন্টারনেট স্লো/গুড)
+            function enableAutoQuality() {
+                if (!hls || !hls.levels || hls.levels.length === 0) return;
+
+                // ব্যান্ডউইথ দেখে অটো অ্যাডজাস্ট
+                hls.on(Hls.Events.FRAG_LOADED, () => {
+                    if (qualityLocked) return;
+                    const bwEstimate = hls.bandwidthEstimate || 0;
+                    if (bwEstimate <= 0) return;
+
+                    // প্রতিটা লেভেলের বিটরেট চেক
+                    let bestLevel = maxLevel;
+                    for (let i = maxLevel; i >= 0; i--) {
+                        if (hls.levels[i].bitrate <= bwEstimate * 0.9) {
+                            bestLevel = i;
+                            break;
+                        }
+                    }
+                    if (bestLevel !== currentLevel) {
+                        currentLevel = bestLevel;
+                        hls.currentLevel = currentLevel;
+                        console.log('📶 Auto quality: ' + hls.levels[currentLevel].height + 'p (bw: ' + (bwEstimate/1000).toFixed(0) + 'kbps)');
+                    }
                 });
 
-                hls.loadSource(STREAM_URL);
-                hls.attachMedia(video);
-
-                hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-                    if (data.levels.length > 0) {
-                        hls.currentLevel = data.levels.length - 1;
+                // বারবার স্টল হলে জরুরি কোয়ালিটি কমাও
+                let stallCount = 0;
+                video.addEventListener('stalled', () => {
+                    stallCount++;
+                    if (stallCount >= 2 && currentLevel > 0) {
+                        qualityLocked = true;
+                        currentLevel--;
+                        hls.currentLevel = currentLevel;
+                        console.warn('⚠️ Stall detected -> quality drop to ' + hls.levels[currentLevel].height + 'p');
+                        stallCount = 0;
+                        clearTimeout(stallRecoveryTimer);
+                        stallRecoveryTimer = setTimeout(() => { qualityLocked = false; }, 15000);
                     }
-                    
-                    // Plyr প্লেয়ার ইনিশিয়ালাইজ
-                    player = new Plyr(video, {
-                        controls: [
-                            'play-large',
-                            'play',
-                            'progress',
-                            'current-time',
-                            'duration',
-                            'mute',
-                            'volume',
-                            'settings',
-                            'pip',
-                            'airplay',
-                            'fullscreen',
-                        ],
-                        settings: ['quality', 'speed', 'loop'],
-                        quality: {
-                            default: hls.levels.length - 1,
-                            options: hls.levels.map((level, index) => ({
-                                label: level.height + 'p',
-                                value: index
-                            })),
-                            forced: false,
-                            onChange: (quality) => {
-                                hls.currentLevel = quality;
-                            }
-                        },
-                        speed: {
-                            selected: 1,
-                            options: [0.5, 0.75, 1, 1.25, 1.5, 2]
-                        },
-                        keyboard: { focused: true, global: true },
-                        tooltips: { controls: true, seek: true },
-                        fullscreen: { enabled: true, fallback: true, iosNative: true },
-                        storage: { enabled: true, key: 'plyr_volume' },
+                });
+                video.addEventListener('playing', () => {
+                    stallCount = 0;
+                });
+            }
+
+            function initializePlayer() {
+                if (typeof Plyr === 'undefined' || typeof Hls === 'undefined') {
+                    setTimeout(initializePlayer, 200);
+                    return;
+                }
+
+                if (Hls.isSupported()) {
+                    hls = new Hls({
+                        autoStartLoad: true,
+                        startLevel: -1,
+                        capLevelToPlayerSize: false,
+                        maxBufferLength: 25,
+                        maxMaxBufferLength: 35,
+                        fragLoadingTimeOut: 25000,
+                        fragLoadingMaxRetry: 999,
+                        manifestLoadingMaxRetry: 999,
+                        levelLoadingTimeOut: 25000,
+                        levelLoadingMaxRetry: 999,
+                        abrBandWidthFactor: 0.9,
+                        abrBandWidthUpFactor: 0.5,
                     });
 
-                    // সাউন্ড অন
+                    hls.loadSource(STREAM_URL);
+                    hls.attachMedia(video);
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                        maxLevel = data.levels.length - 1;
+                        currentLevel = maxLevel;
+                        hls.currentLevel = maxLevel;
+                        console.log('🎬 Manifest ready, max quality: ' + data.levels[maxLevel].height + 'p');
+
+                        // Plyr init
+                        const qualityOptions = data.levels.map((level, index) => ({
+                            label: level.height + 'p',
+                            value: index,
+                            default: index === maxLevel
+                        }));
+
+                        player = new Plyr(video, {
+                            controls: [
+                                'play-large',
+                                'play',
+                                'progress',
+                                'current-time',
+                                'duration',
+                                'mute',
+                                'volume',
+                                'settings',
+                                'pip',
+                                'airplay',
+                                'fullscreen',
+                            ],
+                            settings: ['quality', 'speed'],
+                            quality: {
+                                default: maxLevel,
+                                options: qualityOptions,
+                                forced: false,
+                                onChange: (newLevel) => {
+                                    hls.currentLevel = newLevel;
+                                    currentLevel = newLevel;
+                                    qualityLocked = true;
+                                    clearTimeout(stallRecoveryTimer);
+                                    stallRecoveryTimer = setTimeout(() => { qualityLocked = false; }, 30000);
+                                    console.log('👆 Manual quality: ' + hls.levels[newLevel].height + 'p');
+                                }
+                            },
+                            speed: {
+                                selected: 1,
+                                options: [0.5, 0.75, 1, 1.25, 1.5, 2]
+                            },
+                            keyboard: { focused: true, global: true },
+                            tooltips: { controls: true, seek: true },
+                            fullscreen: { enabled: true, fallback: true, iosNative: true },
+                            storage: { enabled: true, key: 'plyr_volume' },
+                        });
+
+                        // সর্বদা সাউন্ড চালু
+                        video.muted = false;
+                        video.volume = player.storage.get('plyr_volume') || 1.0;
+                        video.play().catch(() => {
+                            video.muted = true;
+                            video.play().then(() => {
+                                video.muted = false;
+                            }).catch(() => {});
+                        });
+
+                        // অটো কোয়ালিটি চালু
+                        enableAutoQuality();
+                    });
+
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            console.error('Fatal error:', data.type);
+                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                                hls.startLoad();
+                                if (currentLevel > 0) {
+                                    currentLevel--;
+                                    hls.currentLevel = currentLevel;
+                                }
+                            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                                hls.recoverMediaError();
+                            } else {
+                                hls.destroy();
+                                setTimeout(initializePlayer, 1000);
+                            }
+                        }
+                    });
+
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = STREAM_URL;
+                    player = new Plyr(video, {
+                        controls: [
+                            'play-large', 'play', 'progress', 'current-time', 'duration',
+                            'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen',
+                        ],
+                        speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+                        fullscreen: { enabled: true, fallback: true, iosNative: true },
+                    });
                     video.muted = false;
-                    video.volume = player.storage.get('plyr_volume') || 1;
-                    
+                    video.volume = 1.0;
                     video.play().catch(() => {
                         video.muted = true;
                         video.play().then(() => {
                             video.muted = false;
                         }).catch(() => {});
                     });
+                }
 
-                    // প্লেয়ার রেডি
-                    player.on('ready', () => {
-                        console.log('✅ Plyr Player Ready');
-                    });
-
-                    // কোয়ালিটি চেঞ্জ ট্র্যাক
-                    player.on('qualitychange', (event) => {
-                        console.log('📺 Quality changed:', event.detail);
-                    });
-                });
-
-                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-                    console.log('📺 Level:', hls.levels[data.level].height + 'p');
-                });
-
-                hls.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        console.error('Error:', data.type);
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-                        else { hls.destroy(); setTimeout(start, 1000); }
+                // প্লে যাতে সবসময় চালু থাকে
+                setInterval(() => {
+                    if (video.paused && !video.ended) {
+                        video.play().catch(() => {});
                     }
-                });
-
-                setInterval(() => {
-                    if (video.paused) video.play().catch(() => {});
-                }, 3000);
-
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = STREAM_URL;
-                
-                player = new Plyr(video, {
-                    controls: [
-                        'play-large', 'play', 'progress', 'current-time', 'duration',
-                        'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen',
-                    ],
-                    speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-                    fullscreen: { enabled: true, fallback: true, iosNative: true },
-                });
-
-                video.muted = false;
-                video.volume = 1.0;
-                video.play().catch(() => {
-                    video.muted = true;
-                    video.play().then(() => {
-                        video.muted = false;
-                    }).catch(() => {});
-                });
-
-                setInterval(() => {
-                    if (video.paused) video.play().catch(() => {});
-                }, 3000);
+                }, 3500);
             }
-        }
 
-        setTimeout(start, 1000);
+            // ইউজার ক্লিক ইভেন্ট
+            document.addEventListener('click', goFullOnClick);
+            document.addEventListener('touchstart', goFullOnClick, { passive: true });
 
-        document.addEventListener('click', goFull);
-        document.addEventListener('touchstart', goFull);
-
-        console.log('%c🎬 T Sports HD %c| %cPlyr Player %c| %cS.B Shehab',
-            'color:#e63946;font-weight:bold;',
-            'color:#fff;',
-            'color:#00b4d8;',
-            'color:#fff;',
-            'color:#f0c040;');
+            // স্টার্ট
+            setTimeout(initializePlayer, 600);
+        })();
     </script>
 </body>
 </html>
