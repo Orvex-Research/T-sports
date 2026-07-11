@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>T Sports HD</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: #000; 
+            width: 100vw; 
+            height: 100vh; 
+            overflow: hidden;
+        }
+        
+        video { 
+            width: 100vw; 
+            height: 100vh; 
+            object-fit: contain; 
+            background: #000;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        
+        #credit {
+            position: fixed;
+            bottom: 6px;
+            right: 10px;
+            color: rgba(255,255,255,0.25);
+            font-family: Arial;
+            font-size: 9px;
+            z-index: 10;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <video id="video" playsinline webkit-playsinline muted autoplay></video>
+    <div id="credit">S.B Shehab</div>
+
+    <!-- HLS.js - Stable Version -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+    
+    <script>
+        const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
+        const STREAM_URL = atob(_k);
+
+        const video = document.getElementById('video');
+        let hls = null;
+
+        // ========== ফুলস্ক্রিন ফোর্স ==========
+        function goFullscreen() {
+            const el = document.documentElement;
+            try {
+                if (el.requestFullscreen) {
+                    el.requestFullscreen();
+                } else if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen();
+                } else if (el.msRequestFullscreen) {
+                    el.msRequestFullscreen();
+                }
+            } catch(e) {}
+            
+            // ল্যান্ডস্কেপ লক
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape');
+                }
+            } catch(e) {}
+        }
+
+        // ========== HLS Player Setup ==========
+        function setupPlayer() {
+            if (typeof Hls === 'undefined') {
+                // HLS.js লোড না হলে ২ সেকেন্ড পর আবার ট্রাই
+                setTimeout(setupPlayer, 2000);
+                return;
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    lowLatencyMode: false,
+                    enableWorker: true,
+                    maxBufferLength: 30,
+                    manifestLoadingTimeOut: 20000,
+                    manifestLoadingMaxRetry: 5,
+                    levelLoadingTimeOut: 20000,
+                    levelLoadingMaxRetry: 5,
+                    fragLoadingTimeOut: 20000,
+                    fragLoadingMaxRetry: 5
+                });
+
+                hls.loadSource(STREAM_URL);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    // ম্যানিফেস্ট পেয়েছে, এখন প্লে করো
+                    video.muted = false;
+                    const playPromise = video.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            goFullscreen();
+                        }).catch(() => {
+                            // অটোপ্লে ব্লক হলে muted করে ট্রাই
+                            video.muted = true;
+                            video.play().then(() => goFullscreen()).catch(() => {});
+                        });
+                    }
+                });
+
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('Network error, retrying...');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Media error, recovering...');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                console.log('Fatal error, trying direct play...');
+                                hls.destroy();
+                                // সরাসরি ভিডিও সোর্স হিসেবে ট্রাই
+                                tryDirectPlay();
+                                break;
+                        }
+                    }
+                });
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari/iOS Native HLS
+                video.src = STREAM_URL;
+                video.addEventListener('loadedmetadata', () => {
+                    video.play().then(() => goFullscreen()).catch(() => {
+                        video.muted = true;
+                        video.play().then(() => goFullscreen()).catch(() => {});
+                    });
+                });
+            } else {
+                // কিছুই সাপোর্ট না করলে সরাসরি ট্রাই
+                tryDirectPlay();
+            }
+        }
+
+        // ========== Direct Play Fallback ==========
+        function tryDirectPlay() {
+            video.src = STREAM_URL;
+            video.muted = true;
+            video.load();
+            video.play().then(() => goFullscreen()).catch(() => {});
+        }
+
+        // ========== Start ==========
+        // পেজ লোড হওয়ার ১ সেকেন্ড পর শুরু (HLS.js লোডের জন্য)
+        setTimeout(setupPlayer, 1000);
+
+        // ক্লিক/টাচ করলেও ফুলস্ক্রিন নিশ্চিত
+        document.addEventListener('click', goFullscreen);
+        document.addEventListener('touchstart', goFullscreen);
+        
+        // যেকোনো কী প্রেসে ফুলস্ক্রিন
+        document.addEventListener('keydown', goFullscreen);
+
+        console.log('%c📺 T Sports HD %c| %cS.B Shehab %c| Ready',
+            'color:#e63946;font-weight:bold;',
+            'color:#fff;',
+            'color:#f0c040;',
+            'color:#888;');
+    </script>
+</body>
+</html>
