@@ -6,136 +6,100 @@
     <title>T Sports HD</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            background: #000; 
-            width: 100vw; 
-            height: 100vh; 
-            overflow: hidden;
-        }
-        
-        video { 
-            width: 100vw; 
-            height: 100vh; 
-            object-fit: contain; 
-            background: #000;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
-        
-        #credit {
-            position: fixed;
-            bottom: 6px;
-            right: 10px;
-            color: rgba(255,255,255,0.25);
-            font-family: Arial;
-            font-size: 9px;
-            z-index: 10;
-            pointer-events: none;
-        }
+        html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
+        video { width: 100%; height: 100%; object-fit: contain; background: #000; position: absolute; top: 0; left: 0; }
+        #credit { position: fixed; bottom: 6px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay></video>
+    <video id="video" playsinline webkit-playsinline autoplay muted></video>
     <div id="credit">S.B Shehab</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
         const STREAM_URL = atob(_k);
-
         const video = document.getElementById('video');
         let hls = null;
-        let soundUnlocked = false;
+        let fullscreenOn = false;
 
-        // ========== ফুলস্ক্রিন ==========
-        function goFullscreen() {
-            const el = document.documentElement;
-            try {
-                if (el.requestFullscreen) {
-                    el.requestFullscreen();
-                } else if (el.webkitRequestFullscreen) {
-                    el.webkitRequestFullscreen();
-                } else if (el.msRequestFullscreen) {
-                    el.msRequestFullscreen();
-                }
-            } catch(e) {}
-            
-            try {
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape');
-                }
-            } catch(e) {}
-            
-            // ফুলস্ক্রিন বা ক্লিকের পর সাউন্ড আনমিউট
-            unlockSound();
-        }
-
-        // ========== সাউন্ড আনলক ==========
-        function unlockSound() {
-            if (!soundUnlocked) {
+        // ========== ১ ক্লিক ফুলস্ক্রিন টগল ==========
+        function toggleFullscreen() {
+            if (!fullscreenOn) {
+                const el = document.documentElement;
+                if (el.requestFullscreen) el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
                 video.muted = false;
                 video.volume = 1.0;
-                soundUnlocked = true;
-                console.log('🔊 Sound Unlocked');
+                fullscreenOn = true;
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                fullscreenOn = false;
             }
         }
 
+        // ফুলস্ক্রিন চেঞ্জ হলে ট্র্যাক
+        document.addEventListener('fullscreenchange', () => {
+            fullscreenOn = !!document.fullscreenElement;
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            fullscreenOn = !!document.webkitFullscreenElement;
+        });
+
         // ========== HLS Player ==========
-        function setupPlayer() {
-            if (typeof Hls === 'undefined') {
-                setTimeout(setupPlayer, 1000);
-                return;
-            }
+        function start() {
+            if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
 
             if (Hls.isSupported()) {
                 hls = new Hls({
                     lowLatencyMode: false,
                     enableWorker: true,
-                    maxBufferLength: 30,
-                    manifestLoadingTimeOut: 20000,
-                    manifestLoadingMaxRetry: 5,
-                    levelLoadingTimeOut: 20000,
-                    fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 5,
-                    // অডিও ট্র্যাক অটো সিলেক্ট
+                    maxBufferLength: 10,
+                    maxMaxBufferLength: 20,
+                    startLevel: -1,
+                    capLevelToPlayerSize: false,
                     autoStartLoad: true,
-                    startLevel: -1
+                    manifestLoadingTimeOut: 10000,
+                    manifestLoadingMaxRetry: 999,
+                    manifestLoadingRetryDelay: 1000,
+                    levelLoadingTimeOut: 10000,
+                    levelLoadingMaxRetry: 999,
+                    levelLoadingRetryDelay: 1000,
+                    fragLoadingTimeOut: 10000,
+                    fragLoadingMaxRetry: 999,
+                    fragLoadingRetryDelay: 1000,
                 });
 
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
 
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    // প্রথমে muted দিয়ে প্লে শুরু
+                hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                    if (data.levels.length > 0) {
+                        hls.currentLevel = data.levels.length - 1;
+                    }
                     video.muted = true;
                     video.play().then(() => {
-                        goFullscreen();
-                        // ৫০০ মিলিসেকেন্ড পর আনমিউট
-                        setTimeout(unlockSound, 500);
+                        setTimeout(() => { video.muted = false; }, 800);
                     }).catch(() => {
-                        goFullscreen();
+                        setTimeout(() => {
+                            video.muted = true;
+                            video.play().catch(() => {});
+                        }, 500);
                     });
                 });
 
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        switch(data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                hls.destroy();
-                                tryDirectPlay();
-                                break;
-                        }
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
                     }
+                });
+
+                hls.on(Hls.Events.BUFFER_STALLED, () => {
+                    hls.recoverMediaError();
                 });
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -143,46 +107,36 @@
                 video.muted = true;
                 video.addEventListener('loadedmetadata', () => {
                     video.play().then(() => {
-                        goFullscreen();
-                        setTimeout(unlockSound, 500);
+                        setTimeout(() => { video.muted = false; }, 800);
                     }).catch(() => {});
                 });
-            } else {
-                tryDirectPlay();
+                video.addEventListener('stalled', () => {
+                    video.load();
+                    video.play().catch(() => {});
+                });
             }
         }
 
-        function tryDirectPlay() {
-            video.src = STREAM_URL;
-            video.muted = true;
-            video.load();
-            video.play().then(() => {
-                goFullscreen();
-                setTimeout(unlockSound, 500);
-            }).catch(() => {});
-        }
+        setTimeout(start, 500);
 
-        // ========== Start ==========
-        setTimeout(setupPlayer, 1000);
-
-        // ক্লিক/টাচ = ফুলস্ক্রিন + সাউন্ড
-        document.addEventListener('click', () => {
-            goFullscreen();
-            unlockSound();
-        });
-        
-        document.addEventListener('touchstart', () => {
-            goFullscreen();
-            unlockSound();
-        });
-        
-        document.addEventListener('keydown', () => {
-            goFullscreen();
-            unlockSound();
+        // ========== ১ ক্লিক = ফুলস্ক্রিন টগল ==========
+        document.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleFullscreen();
         });
 
-        console.log('%c📺 T Sports HD %c| %cS.B Shehab %c| Sound Ready',
-            'color:#e63946;font-weight:bold;',
+        document.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            toggleFullscreen();
+        });
+
+        video.addEventListener('stalled', () => {
+            if (hls) hls.recoverMediaError();
+            video.play().catch(() => {});
+        });
+
+        console.log('%c🚀 T Sports HD %c| %cS.B Shehab %c| 1-Click FS',
+            'color:#e63946;font-weight:bold;font-size:16px;',
             'color:#fff;',
             'color:#f0c040;',
             'color:#888;');
