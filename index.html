@@ -2,8 +2,6 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-    
     <title>T Sports Live</title>
     <style>
         body { margin: 0; background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; }
@@ -16,18 +14,17 @@
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
-        // সরাসরি সেই লিংকটি ব্যবহার করুন যা আপনার ব্রাউজারে চলছে
-        const STREAM_URL = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
+        // আমরা এখানে cors-anywhere এর একটি পাবলিক প্রক্সি সার্ভিস ব্যবহার করছি
+        const rawUrl = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(rawUrl);
         
         const video = document.getElementById('video');
         
         if (Hls.isSupported()) {
             const hls = new Hls();
-            hls.loadSource(STREAM_URL);
+            hls.loadSource(proxyUrl);
             hls.attachMedia(video);
-            hls.play();
-        } else {
-            video.src = STREAM_URL;
+            hls.play().catch(e => console.log("Auto-play blocked, please click play."));
         }
     </script>
 </body>
