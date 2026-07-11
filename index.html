@@ -1,30 +1,101 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>T Sports Live</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T-Sports HD Player</title>
+    <!-- Include hls.js for playing m3u8 files -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { margin: 0; background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; }
-        video { width: 100%; max-height: 100vh; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 50px;
+            height: 100vh;
+            margin: 0;
+            box-sizing: border-box;
+        }
+        h2 {
+            margin-bottom: 10px;
+            color: #38bdf8;
+        }
+        .video-container {
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #1e293b;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .warning {
+            background-color: #7f1d1d;
+            border: 1px solid #dc2626;
+            color: #fca5a5;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            max-width: 80%;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
 
-    <video id="video" controls autoplay playsinline></video>
+    <h2>T-Sports HD Player</h2>
+    
+    <div class="warning" id="warning-msg" style="display: none;">
+        <strong>Mixed Content Error:</strong> This site is loaded over HTTPS, but the video stream is HTTP. 
+        Your browser will block the video. It will only work locally or on an HTTP server.
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <div class="video-container">
+        <video id="video" controls autoplay></video>
+    </div>
+
     <script>
-        // আমরা এখানে cors-anywhere এর একটি পাবলিক প্রক্সি সার্ভিস ব্যবহার করছি
-        const rawUrl = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(rawUrl);
+        var video = document.getElementById('video');
+        var videoSrc = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
         
-        const video = document.getElementById('video');
-        
+        // Show warning if trying to load HTTP stream on HTTPS site (like GitHub Pages)
+        if (window.location.protocol === 'https:' && videoSrc.startsWith('http:')) {
+            document.getElementById('warning-msg').style.display = 'block';
+        }
+
+        // Initialize hls.js
         if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(proxyUrl);
+            var hls = new Hls({
+                debug: false
+            });
+            hls.loadSource(videoSrc);
             hls.attachMedia(video);
-            hls.play().catch(e => console.log("Auto-play blocked, please click play."));
+            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                // Force highest quality available
+                var highestLevel = data.levels.length - 1;
+                hls.currentLevel = highestLevel;
+                
+                video.play().catch(e => console.log("Autoplay blocked:", e));
+            });
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                console.error('HLS error:', data);
+            });
+        }
+        // Fallback for Safari which has built-in HLS support
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = videoSrc;
+            video.addEventListener('loadedmetadata', function() {
+                video.play().catch(e => console.log("Autoplay blocked:", e));
+            });
         }
     </script>
 </body>
