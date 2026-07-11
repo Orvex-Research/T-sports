@@ -13,7 +13,7 @@
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay></video>
+    <video id="video" playsinline webkit-playsinline autoplay muted></video>
     <div id="credit">S.B Shehab</div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -22,20 +22,22 @@
         const STREAM_URL = atob(_k);
         const video = document.getElementById('video');
         let hls = null;
-        let activated = false;
+        let clicked = false;
+        let currentLevel = 0;
+        let maxLevel = 0;
+        let stallCount = 0;
+        let lastStallTime = 0;
+        let smoothTime = 0;
 
-        function activateAll() {
-            if (activated) return;
-            activated = true;
-
+        function goFull() {
+            if (clicked) return;
+            clicked = true;
             const el = document.documentElement;
             if (el.requestFullscreen) el.requestFullscreen();
             else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
             try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
-
             video.muted = false;
             video.volume = 1.0;
-            video.play().catch(() => {});
         }
 
         function start() {
@@ -46,37 +48,91 @@
                     autoStartLoad: true,
                     startLevel: -1,
                     capLevelToPlayerSize: false,
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 60,
+                    maxBufferLength: 20,
+                    maxMaxBufferLength: 30,
                     fragLoadingTimeOut: 30000,
                     fragLoadingMaxRetry: 999,
                     manifestLoadingMaxRetry: 999,
+                    levelLoadingTimeOut: 30000,
+                    levelLoadingMaxRetry: 999,
+                    abrBandWidthFactor: 0.9,
+                    abrBandWidthUpFactor: 0.5,
                 });
 
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-                    if (data.levels.length > 0) {
-                        hls.currentLevel = data.levels.length - 1;
-                    }
-                    // সাউন্ড সহ প্লে
-                    video.muted = false;
-                    video.volume = 1.0;
+                    maxLevel = data.levels.length - 1;
+                    currentLevel = maxLevel;
+                    hls.currentLevel = currentLevel;
+                    console.log('🎯 Quality:', data.levels[currentLevel].height + 'p');
+
                     video.play().catch(() => {
-                        // ফলব্যাক: muted দিয়ে ট্রাই
-                        video.muted = true;
-                        video.play().then(() => {
-                            video.muted = false;
-                        }).catch(() => {});
+                        setTimeout(() => video.play().catch(() => {}), 500);
                     });
+                });
+
+                // ভিডিও স্টল = ইন্টারনেট প্রবলেম
+                video.addEventListener('stalled', () => {
+                    stallCount++;
+                    lastStallTime = Date.now();
+                    console.log('⏸️ Stall #' + stallCount);
+
+                    if (stallCount >= 2 && currentLevel > 0) {
+                        currentLevel--;
+                        hls.currentLevel = currentLevel;
+                        console.log('⬇️ Internet slow → Quality:', hls.levels[currentLevel].height + 'p');
+                        stallCount = 0;
+                    }
+
+                    video.play().catch(() => {});
+                });
+
+                video.addEventListener('waiting', () => {
+                    stallCount++;
+                    if (stallCount >= 3 && currentLevel > 0) {
+                        currentLevel--;
+                        hls.currentLevel = currentLevel;
+                        console.log('⬇️ Buffering → Quality:', hls.levels[currentLevel].height + 'p');
+                        stallCount = 0;
+                    }
+                });
+
+                video.addEventListener('playing', () => {
+                    if (Date.now() - lastStallTime > 5000) {
+                        stallCount = 0;
+                    }
+                    smoothTime++;
+                    // ২ মিনিট স্মুথ = অটো হাই কোয়ালিটি
+                    if (smoothTime >= 120 && currentLevel < maxLevel) {
+                        currentLevel++;
+                        hls.currentLevel = currentLevel;
+                        console.log('⬆️ Internet good → Quality:', hls.levels[currentLevel].height + 'p');
+                        smoothTime = 0;
+                    }
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    currentLevel = data.level;
+                    console.log('📺 Quality:', hls.levels[currentLevel].height + 'p');
                 });
 
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-                        else { hls.destroy(); setTimeout(start, 1000); }
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            console.log('🔄 Network error, retry...');
+                            hls.startLoad();
+                            if (currentLevel > 0) {
+                                currentLevel--;
+                                hls.currentLevel = currentLevel;
+                            }
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            hls.recoverMediaError();
+                        } else {
+                            hls.destroy();
+                            setTimeout(start, 1000);
+                        }
                     }
                 });
 
@@ -86,13 +142,10 @@
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
-                video.muted = false;
-                video.volume = 1.0;
-                video.play().catch(() => {
-                    video.muted = true;
-                    video.play().then(() => {
-                        video.muted = false;
-                    }).catch(() => {});
+                video.play().catch(() => {});
+                video.addEventListener('stalled', () => {
+                    video.load();
+                    video.play().catch(() => {});
                 });
                 setInterval(() => {
                     if (video.paused) video.play().catch(() => {});
@@ -102,8 +155,8 @@
 
         setTimeout(start, 500);
 
-        document.addEventListener('click', activateAll);
-        document.addEventListener('touchstart', activateAll);
+        document.addEventListener('click', goFull);
+        document.addEventListener('touchstart', goFull);
     </script>
 </body>
 </html>
