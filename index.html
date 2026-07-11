@@ -3,78 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>T Sports HD</title>
+    <title>T Sports HD Player</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
-        video { width: 100%; height: 100%; object-fit: contain; background: #000; position: absolute; top: 0; left: 0; }
-        #credit { position: fixed; bottom: 6px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; }
+        video { width: 100vw; height: 100vh; object-fit: contain; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; cursor: pointer; }
+        /* ক্রেডিট লেখা আরও ছোট করা হয়েছে */
+        #credit { position: fixed; bottom: 5px; right: 10px; color: rgba(255, 255, 255, 0.3); font-family: sans-serif; font-size: 8px; z-index: 20; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay></video>
+    <video id="video" playsinline webkit-playsinline autoplay muted></video>
     <div id="credit">S.B Shehab</div>
+    <div id="overlay"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         const STREAM_URL = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
         const video = document.getElementById('video');
-        let hls = null;
-        let clicked = false;
+        const overlay = document.getElementById('overlay');
 
-        function goFull() {
-            if (clicked) return;
-            clicked = true;
-            const el = document.documentElement;
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
+        function activateExperience() {
+            // সাউন্ড চালু করা
+            video.muted = false;
+            
+            // ফুলস্ক্রিন রিকোয়েস্ট
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) doc.requestFullscreen();
+            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+
+            // ল্যান্ডস্কেপ মোড নিশ্চিত করা
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
         }
 
-        function start() {
-            if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
-
+        function startPlayer() {
             if (Hls.isSupported()) {
-                hls = new Hls({
-                    autoStartLoad: true,
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 60,
-                    fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 999,
-                    manifestLoadingMaxRetry: 999,
-                });
-
+                const hls = new Hls();
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
-
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.muted = false;
-                    video.volume = 1.0;
                     video.play().catch(() => {});
                 });
-
-                hls.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-                        else { hls.destroy(); setTimeout(start, 1000); }
-                    }
-                });
-
-                setInterval(() => { if (video.paused) video.play().catch(() => {}); }, 3000);
-
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
-                video.muted = false;
-                video.volume = 1.0;
                 video.play().catch(() => {});
             }
         }
 
-        setTimeout(start, 500);
-        document.addEventListener('click', goFull);
-        document.addEventListener('touchstart', goFull, { passive: true });
+        startPlayer();
+
+        // প্রতিবার ক্লিকেই ল্যান্ডস্কেপ ও ফুলস্ক্রিন কমান্ড কার্যকর হবে
+        overlay.addEventListener('click', activateExperience);
     </script>
 </body>
 </html>
