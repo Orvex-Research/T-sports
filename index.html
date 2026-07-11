@@ -21,21 +21,15 @@
         const STREAM_URL = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
         const video = document.getElementById('video');
         let hls = null;
-        let fullscreenDone = false;
+        let clicked = false;
 
-        function goFullscreen() {
-            if (fullscreenDone) return;
-            fullscreenDone = true;
-
+        function goFull() {
+            if (clicked) return;
+            clicked = true;
             const el = document.documentElement;
             if (el.requestFullscreen) el.requestFullscreen();
             else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-
-            try {
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(() => {});
-                }
-            } catch(e) {}
+            try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
         }
 
         function start() {
@@ -55,7 +49,6 @@
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    // শুরু থেকেই সাউন্ড + ভিডিও একসাথে
                     video.muted = false;
                     video.volume = 1.0;
                     video.play().catch(() => {});
@@ -69,10 +62,7 @@
                     }
                 });
 
-                video.addEventListener('stalled', () => video.play().catch(() => {}));
-                setInterval(() => {
-                    if (video.paused) video.play().catch(() => {});
-                }, 3000);
+                setInterval(() => { if (video.paused) video.play().catch(() => {}); }, 3000);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
@@ -83,9 +73,8 @@
         }
 
         setTimeout(start, 500);
-
-        document.addEventListener('click', goFullscreen);
-        document.addEventListener('touchstart', goFullscreen, { passive: true });
+        document.addEventListener('click', goFull);
+        document.addEventListener('touchstart', goFull, { passive: true });
     </script>
 </body>
 </html>
