@@ -7,145 +7,21 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
-        
-        #loader {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 100;
-            display: flex; align-items: center; justify-content: center; flex-direction: column;
-            transition: opacity 0.5s ease;
-        }
-        .spinner {
-            width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2);
-            border-top-color: #e63946; border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loader-text {
-            color: rgba(255,255,255,0.7); font-family: Arial; font-size: 12px;
-            margin-top: 14px; letter-spacing: 1px;
-        }
-        
-        /* 🔥 রিয়েল-টাইম বাফার মিটার */
-        #bufferMeter {
-            position: fixed; bottom: 0; left: 0; width: 100%; height: 3px;
-            background: rgba(255,255,255,0.1); z-index: 50;
-        }
-        #bufferFill {
-            height: 100%; width: 0%;
-            background: linear-gradient(90deg, #e63946, #ff6b6b);
-            transition: width 0.3s linear;
-        }
-        #bufferTime {
-            position: fixed; bottom: 8px; left: 10px;
-            color: rgba(255,255,255,0.4); font-family: Arial; font-size: 9px; z-index: 50;
-        }
-        
         video { width: 100%; height: 100%; object-fit: contain; background: #000; position: absolute; top: 0; left: 0; }
-        #credit { position: fixed; bottom: 14px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
-        #info { position: fixed; top: 6px; left: 10px; color: rgba(255,255,255,0.5); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
+        #credit { position: fixed; bottom: 6px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="loader">
-        <div class="spinner"></div>
-        <div class="loader-text">T SPORTS HD</div>
-    </div>
-
-    <div id="bufferMeter"><div id="bufferFill"></div></div>
-    <div id="bufferTime"></div>
-
     <video id="video" playsinline webkit-playsinline autoplay muted></video>
     <div id="credit">S.B Shehab</div>
-    <div id="info"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
         const STREAM_URL = atob(_k);
         const video = document.getElementById('video');
-        const loader = document.getElementById('loader');
-        const bufferFill = document.getElementById('bufferFill');
-        const bufferTime = document.getElementById('bufferTime');
-        const info = document.getElementById('info');
-        let hls = null, played = false, loaderHidden = false;
-        let currentQuality = 0, maxQuality = 0;
-        let stallCount = 0, smoothCounter = 0;
-        let bufferCheckInterval = null;
-        let manualQualityLock = false;
-
-        function hideLoader() {
-            if (!loaderHidden) {
-                loaderHidden = true;
-                loader.style.opacity = '0';
-                setTimeout(() => { loader.style.display = 'none'; }, 500);
-            }
-        }
-
-        function goFull() {
-            if (!loaderHidden) return;
-            const el = document.documentElement;
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
-            video.muted = false;
-            video.volume = 1.0;
-        }
-
-        // 🔥 রিয়েল-টাইম বাফার মিটার আপডেট
-        function updateBufferMeter() {
-            const buffered = video.buffered;
-            if (buffered.length > 0) {
-                const currentTime = video.currentTime;
-                const bufferedEnd = buffered.end(buffered.length - 1);
-                const totalDuration = video.duration || bufferedEnd;
-                
-                // বাফার পার্সেন্টেজ
-                const buffPercent = Math.min((bufferedEnd / totalDuration) * 100, 100);
-                bufferFill.style.width = buffPercent + '%';
-                
-                // বাফার সময়
-                const buffSec = Math.round(bufferedEnd - currentTime);
-                if (buffSec > 0) {
-                    bufferTime.textContent = 'Buffer: ' + buffSec + 's';
-                }
-            }
-        }
-
-        // 🔥 অটো বাফারিং টাইম ক্যালকুলেট করে কোয়ালিটি অ্যাডজাস্ট
-        function autoQualityControl() {
-            if (manualQualityLock || !hls || !hls.levels || hls.levels.length === 0) return;
-            
-            const buffered = video.buffered;
-            if (buffered.length > 0) {
-                const currentTime = video.currentTime;
-                const bufferedEnd = buffered.end(buffered.length - 1);
-                const bufferSec = bufferedEnd - currentTime;
-                
-                // 🔥 বাফার ৫ সেকেন্ডের কম = কোয়ালিটি কমাও
-                if (bufferSec < 5 && currentQuality > 0) {
-                    currentQuality--;
-                    hls.currentLevel = currentQuality;
-                    console.log('⬇️ Auto: Low buffer (' + Math.round(bufferSec) + 's) → Quality ' + hls.levels[currentQuality].height + 'p');
-                    info.textContent = '⬇️ ' + hls.levels[currentQuality].height + 'p';
-                    stallCount = 0;
-                }
-                
-                // 🔥 বাফার ২০+ সেকেন্ড, স্মুথ ২ মিনিট = কোয়ালিটি বাড়াও
-                if (bufferSec > 20 && currentQuality < maxQuality && smoothCounter > 120) {
-                    currentQuality++;
-                    hls.currentLevel = currentQuality;
-                    console.log('⬆️ Auto: High buffer (' + Math.round(bufferSec) + 's) → Quality ' + hls.levels[currentQuality].height + 'p');
-                    info.textContent = '⬆️ ' + hls.levels[currentQuality].height + 'p';
-                    smoothCounter = 0;
-                }
-                
-                // 🔥 বাফার ৮-১৫ সেকেন্ড = পারফেক্ট, স্মুথ কাউন্ট বাড়াও
-                if (bufferSec >= 8 && bufferSec <= 30) {
-                    smoothCounter++;
-                }
-            }
-        }
+        let hls = null;
 
         function start() {
             if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
@@ -155,207 +31,49 @@
                     autoStartLoad: true,
                     startLevel: -1,
                     capLevelToPlayerSize: false,
-                    
-                    // 🔥 বাফার সেটিংস - অটো ব্যালেন্স
-                    maxBufferLength: 20,
-                    maxMaxBufferLength: 30,
-                    backBufferLength: 60,
-                    maxBufferSize: 30 * 1000 * 1000,
-                    
-                    // অটো ব্যান্ডউইথ
-                    abrEwmaDefaultEstimate: 3000000,
-                    abrBandWidthFactor: 0.85,
-                    abrBandWidthUpFactor: 0.6,
-                    
-                    // রিট্রাই
-                    manifestLoadingTimeOut: 20000,
-                    manifestLoadingMaxRetry: 999,
-                    manifestLoadingRetryDelay: 1000,
-                    levelLoadingTimeOut: 20000,
-                    levelLoadingMaxRetry: 999,
-                    levelLoadingRetryDelay: 1000,
-                    fragLoadingTimeOut: 20000,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    fragLoadingTimeOut: 30000,
                     fragLoadingMaxRetry: 999,
-                    fragLoadingRetryDelay: 500,
-                    
-                    highBufferWatchdogPeriod: 2,
-                    liveSyncDurationCount: 3,
-                    liveMaxLatencyDurationCount: 10,
-                    
-                    progressive: true,
-                    enableWorker: true,
+                    manifestLoadingMaxRetry: 999,
                 });
 
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-                    console.log('✅ Manifest | Levels:', data.levels.length);
-                    maxQuality = data.levels.length - 1;
-                    
                     if (data.levels.length > 0) {
-                        // 🔥 হাইয়েস্ট কোয়ালিটি দিয়ে শুরু
-                        currentQuality = maxQuality;
-                        hls.currentLevel = currentQuality;
-                        const lvl = data.levels[currentQuality];
-                        console.log('🎯 Start:', lvl.height + 'p', (lvl.bitrate/1000000).toFixed(1) + 'Mbps');
-                        info.textContent = lvl.height + 'p';
+                        hls.currentLevel = data.levels.length - 1;
                     }
+                    video.muted = true;
+                    video.play().catch(() => {
+                        setTimeout(() => video.play().catch(() => {}), 500);
+                    });
                 });
 
-                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-                    if (hls.levels[data.level]) {
-                        currentQuality = data.level;
-                        const lvl = hls.levels[data.level];
-                        console.log('📺', lvl.height + 'p', (lvl.bitrate/1000000).toFixed(1) + 'Mbps');
-                        info.textContent = lvl.height + 'p';
-                    }
-                });
-
-                // 🔥 বাফার চেক + অটো প্লে স্টার্ট
-                bufferCheckInterval = setInterval(() => {
-                    updateBufferMeter();
-                    
-                    if (!loaderHidden) {
-                        const buffered = video.buffered;
-                        if (buffered.length > 0) {
-                            const bufferedEnd = buffered.end(0);
-                            const bufferSec = bufferedEnd - (video.currentTime || 0);
-                            
-                            // 🔥 ১০ সেকেন্ড বাফার = প্লে শুরু
-                            if (bufferSec >= 10) {
-                                console.log('🎬 Buffer ready (' + Math.round(bufferSec) + 's)! Starting...');
-                                clearInterval(bufferCheckInterval);
-                                bufferCheckInterval = setInterval(() => {
-                                    updateBufferMeter();
-                                    autoQualityControl();
-                                }, 1000);
-                                
-                                video.muted = true;
-                                video.play().then(() => {
-                                    hideLoader();
-                                    if (!played) { played = true; goFull(); }
-                                    setTimeout(() => { video.muted = false; }, 800);
-                                }).catch(() => {
-                                    setTimeout(() => {
-                                        video.play().then(() => {
-                                            hideLoader();
-                                            if (!played) { played = true; goFull(); }
-                                            setTimeout(() => { video.muted = false; }, 800);
-                                        }).catch(() => { hideLoader(); });
-                                    }, 500);
-                                });
-                            }
-                        }
-                    } else {
-                        autoQualityControl();
-                    }
-                }, 1000);
-
-                // ১৫ সেকেন্ড টাইমআউট
-                setTimeout(() => {
-                    if (!loaderHidden) {
-                        console.log('⏰ Timeout! Force start...');
-                        hideLoader();
-                        video.muted = true;
-                        video.play().then(() => {
-                            if (!played) { played = true; goFull(); }
-                            setTimeout(() => { video.muted = false; }, 800);
-                        }).catch(() => {});
-                    }
-                }, 15000);
-
-                // 🔥 স্টল ইভেন্ট
-                video.addEventListener('stalled', () => {
-                    stallCount++;
-                    console.log('⏸️ Stall #' + stallCount);
-                    
-                    // ২ সেকেন্ডে ২ বার স্টল = তাড়াতাড়ি কোয়ালিটি কমাও
-                    if (stallCount >= 2 && currentQuality > 0) {
-                        currentQuality--;
-                        hls.currentLevel = currentQuality;
-                        console.log('⬇️ Stall: → ' + hls.levels[currentQuality].height + 'p');
-                        stallCount = 0;
-                    }
-                    
-                    video.play().catch(() => {});
-                });
-                
-                video.addEventListener('playing', () => {
-                    if (Date.now() - lastStallTime > 5000) stallCount = 0;
-                });
-
-                let lastStallTime = 0;
-                video.addEventListener('stalled', () => { lastStallTime = Date.now(); });
-
-                // 🔥 বাফার স্টল
-                hls.on(Hls.Events.BUFFER_STALLED, () => {
-                    console.log('⏸️ Buffer stalled');
-                    if (currentQuality > 0) {
-                        currentQuality--;
-                        hls.currentLevel = currentQuality;
-                        console.log('⬇️ Buffer stall → ' + hls.levels[currentQuality].height + 'p');
-                    }
-                    hls.recoverMediaError();
-                });
-
-                // 🔥 এরর
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        console.log('💀 Fatal:', data.type);
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            hls.startLoad();
-                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                            hls.recoverMediaError();
-                        } else {
-                            hls.destroy();
-                            setTimeout(start, 1000);
-                        }
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+                        else { hls.destroy(); setTimeout(start, 1000); }
                     }
                 });
+
+                setInterval(() => {
+                    if (video.paused) video.play().catch(() => {});
+                }, 3000);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
                 video.muted = true;
-                
-                const nativeCheck = setInterval(() => {
-                    updateBufferMeter();
-                    const buffered = video.buffered;
-                    if (buffered.length > 0 && buffered.end(0) >= 8) {
-                        clearInterval(nativeCheck);
-                        setInterval(updateBufferMeter, 1000);
-                        hideLoader();
-                        video.play().then(() => {
-                            if (!played) { played = true; goFull(); }
-                            setTimeout(() => { video.muted = false; }, 800);
-                        }).catch(() => { hideLoader(); });
-                    }
-                }, 500);
-                
-                setTimeout(() => {
-                    hideLoader();
-                    setInterval(updateBufferMeter, 1000);
-                    video.play().catch(() => {});
-                }, 15000);
-                
-                video.addEventListener('stalled', () => {
-                    video.load();
-                    video.play().catch(() => {});
-                });
+                video.play().catch(() => {});
+                setInterval(() => {
+                    if (video.paused) video.play().catch(() => {});
+                }, 3000);
             }
         }
 
         setTimeout(start, 500);
-
-        document.addEventListener('click', goFull);
-        document.addEventListener('touchstart', goFull);
-
-        console.log('%c🔥 T Sports HD %c| %cAuto Buffer Control %c| %cS.B Shehab',
-            'color:#e63946;font-weight:bold;font-size:14px;',
-            'color:#fff;',
-            'color:#4ecdc4;',
-            'color:#fff;',
-            'color:#f0c040;');
     </script>
 </body>
 </html>
