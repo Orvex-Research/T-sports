@@ -13,7 +13,7 @@
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay muted></video>
+    <video id="video" playsinline webkit-playsinline autoplay></video>
     <div id="credit">S.B Shehab</div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -21,26 +21,16 @@
         const STREAM_URL = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
         const video = document.getElementById('video');
         let hls = null;
-        let clicked = false;
+        let fullscreenDone = false;
 
-        // ১ ক্লিক = ফুলস্ক্রিন + সাউন্ড আনমিউট
-        function oneClickFullscreen() {
-            if (clicked) return;
-            clicked = true;
+        function goFullscreen() {
+            if (fullscreenDone) return;
+            fullscreenDone = true;
 
-            // সাউন্ড চালু
-            video.muted = false;
-            video.volume = 1.0;
-
-            // ফুলস্ক্রিন
             const el = document.documentElement;
-            if (el.requestFullscreen) {
-                el.requestFullscreen();
-            } else if (el.webkitRequestFullscreen) {
-                el.webkitRequestFullscreen();
-            }
+            if (el.requestFullscreen) el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 
-            // ল্যান্ডস্কেপ লক (মোবাইল)
             try {
                 if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('landscape').catch(() => {});
@@ -49,15 +39,11 @@
         }
 
         function start() {
-            if (typeof Hls === 'undefined') {
-                setTimeout(start, 300);
-                return;
-            }
+            if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
 
             if (Hls.isSupported()) {
                 hls = new Hls({
                     autoStartLoad: true,
-                    capLevelToPlayerSize: false,
                     maxBufferLength: 30,
                     maxMaxBufferLength: 60,
                     fragLoadingTimeOut: 20000,
@@ -69,7 +55,9 @@
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    // মিউটেড প্লে (অটোপ্লে পলিসি)
+                    // শুরু থেকেই সাউন্ড + ভিডিও একসাথে
+                    video.muted = false;
+                    video.volume = 1.0;
                     video.play().catch(() => {});
                 });
 
@@ -81,25 +69,23 @@
                     }
                 });
 
-                // অটো রিস্টার্ট যদি বন্ধ হয়ে যায়
-                video.addEventListener('stalled', () => {
-                    video.play().catch(() => {});
-                });
+                video.addEventListener('stalled', () => video.play().catch(() => {}));
                 setInterval(() => {
                     if (video.paused) video.play().catch(() => {});
                 }, 3000);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari Native HLS
                 video.src = STREAM_URL;
+                video.muted = false;
+                video.volume = 1.0;
                 video.play().catch(() => {});
             }
         }
 
         setTimeout(start, 500);
 
-        document.addEventListener('click', oneClickFullscreen);
-        document.addEventListener('touchstart', oneClickFullscreen);
+        document.addEventListener('click', goFullscreen);
+        document.addEventListener('touchstart', goFullscreen, { passive: true });
     </script>
 </body>
 </html>
