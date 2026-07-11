@@ -7,21 +7,52 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
-        video { width: 100%; height: 100%; object-fit: contain; background: #000; position: absolute; top: 0; left: 0; }
-        #credit { position: fixed; bottom: 6px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
+        
+        #player-container {
+            width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0;
+        }
+        
+        video {
+            width: 100%; height: 100%;
+            object-fit: contain;
+            background: #000;
+            position: absolute;
+            top: 0; left: 0;
+        }
+        
+        #credit {
+            position: fixed;
+            bottom: 6px;
+            right: 10px;
+            color: rgba(255,255,255,0.25);
+            font-family: Arial;
+            font-size: 9px;
+            z-index: 10;
+            pointer-events: none;
+        }
     </style>
+    
+    <!-- Plyr CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay></video>
+    <div id="player-container">
+        <video id="video" playsinline webkit-playsinline autoplay></video>
+    </div>
     <div id="credit">S.B Shehab</div>
 
+    <!-- Plyr JS -->
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
     <script>
         const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
         const STREAM_URL = atob(_k);
         const video = document.getElementById('video');
         let hls = null;
+        let player = null;
         let clicked = false;
 
         function goFull() {
@@ -34,7 +65,10 @@
         }
 
         function start() {
-            if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
+            if (typeof Hls === 'undefined' || typeof Plyr === 'undefined') {
+                setTimeout(start, 300);
+                return;
+            }
 
             if (Hls.isSupported()) {
                 hls = new Hls({
@@ -55,18 +89,73 @@
                     if (data.levels.length > 0) {
                         hls.currentLevel = data.levels.length - 1;
                     }
+                    
+                    // Plyr প্লেয়ার ইনিশিয়ালাইজ
+                    player = new Plyr(video, {
+                        controls: [
+                            'play-large',
+                            'play',
+                            'progress',
+                            'current-time',
+                            'duration',
+                            'mute',
+                            'volume',
+                            'settings',
+                            'pip',
+                            'airplay',
+                            'fullscreen',
+                        ],
+                        settings: ['quality', 'speed', 'loop'],
+                        quality: {
+                            default: hls.levels.length - 1,
+                            options: hls.levels.map((level, index) => ({
+                                label: level.height + 'p',
+                                value: index
+                            })),
+                            forced: false,
+                            onChange: (quality) => {
+                                hls.currentLevel = quality;
+                            }
+                        },
+                        speed: {
+                            selected: 1,
+                            options: [0.5, 0.75, 1, 1.25, 1.5, 2]
+                        },
+                        keyboard: { focused: true, global: true },
+                        tooltips: { controls: true, seek: true },
+                        fullscreen: { enabled: true, fallback: true, iosNative: true },
+                        storage: { enabled: true, key: 'plyr_volume' },
+                    });
+
+                    // সাউন্ড অন
                     video.muted = false;
-                    video.volume = 1.0;
+                    video.volume = player.storage.get('plyr_volume') || 1;
+                    
                     video.play().catch(() => {
                         video.muted = true;
                         video.play().then(() => {
                             video.muted = false;
                         }).catch(() => {});
                     });
+
+                    // প্লেয়ার রেডি
+                    player.on('ready', () => {
+                        console.log('✅ Plyr Player Ready');
+                    });
+
+                    // কোয়ালিটি চেঞ্জ ট্র্যাক
+                    player.on('qualitychange', (event) => {
+                        console.log('📺 Quality changed:', event.detail);
+                    });
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    console.log('📺 Level:', hls.levels[data.level].height + 'p');
                 });
 
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
+                        console.error('Error:', data.type);
                         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
                         else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
                         else { hls.destroy(); setTimeout(start, 1000); }
@@ -79,6 +168,16 @@
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
+                
+                player = new Plyr(video, {
+                    controls: [
+                        'play-large', 'play', 'progress', 'current-time', 'duration',
+                        'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen',
+                    ],
+                    speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+                    fullscreen: { enabled: true, fallback: true, iosNative: true },
+                });
+
                 video.muted = false;
                 video.volume = 1.0;
                 video.play().catch(() => {
@@ -87,16 +186,24 @@
                         video.muted = false;
                     }).catch(() => {});
                 });
+
                 setInterval(() => {
                     if (video.paused) video.play().catch(() => {});
                 }, 3000);
             }
         }
 
-        setTimeout(start, 500);
+        setTimeout(start, 1000);
 
         document.addEventListener('click', goFull);
         document.addEventListener('touchstart', goFull);
+
+        console.log('%c🎬 T Sports HD %c| %cPlyr Player %c| %cS.B Shehab',
+            'color:#e63946;font-weight:bold;',
+            'color:#fff;',
+            'color:#00b4d8;',
+            'color:#fff;',
+            'color:#f0c040;');
     </script>
 </body>
 </html>
