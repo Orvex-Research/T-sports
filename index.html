@@ -13,7 +13,7 @@
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline autoplay muted></video>
+    <video id="video" playsinline webkit-playsinline autoplay></video>
     <div id="credit">S.B Shehab</div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -22,6 +22,21 @@
         const STREAM_URL = atob(_k);
         const video = document.getElementById('video');
         let hls = null;
+        let activated = false;
+
+        function activateAll() {
+            if (activated) return;
+            activated = true;
+
+            const el = document.documentElement;
+            if (el.requestFullscreen) el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            try { screen.orientation && screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
+
+            video.muted = false;
+            video.volume = 1.0;
+            video.play().catch(() => {});
+        }
 
         function start() {
             if (typeof Hls === 'undefined') { setTimeout(start, 300); return; }
@@ -45,9 +60,15 @@
                     if (data.levels.length > 0) {
                         hls.currentLevel = data.levels.length - 1;
                     }
-                    video.muted = true;
+                    // সাউন্ড সহ প্লে
+                    video.muted = false;
+                    video.volume = 1.0;
                     video.play().catch(() => {
-                        setTimeout(() => video.play().catch(() => {}), 500);
+                        // ফলব্যাক: muted দিয়ে ট্রাই
+                        video.muted = true;
+                        video.play().then(() => {
+                            video.muted = false;
+                        }).catch(() => {});
                     });
                 });
 
@@ -65,8 +86,14 @@
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = STREAM_URL;
-                video.muted = true;
-                video.play().catch(() => {});
+                video.muted = false;
+                video.volume = 1.0;
+                video.play().catch(() => {
+                    video.muted = true;
+                    video.play().then(() => {
+                        video.muted = false;
+                    }).catch(() => {});
+                });
                 setInterval(() => {
                     if (video.paused) video.play().catch(() => {});
                 }, 3000);
@@ -74,6 +101,9 @@
         }
 
         setTimeout(start, 500);
+
+        document.addEventListener('click', activateAll);
+        document.addEventListener('touchstart', activateAll);
     </script>
 </body>
 </html>
