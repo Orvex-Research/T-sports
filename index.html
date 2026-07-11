@@ -9,19 +9,22 @@
         html, body { background: #000; width: 100%; height: 100%; overflow: hidden; position: fixed; top: 0; left: 0; }
         video { width: 100%; height: 100%; object-fit: contain; background: #000; position: absolute; top: 0; left: 0; }
         #credit { position: fixed; bottom: 6px; right: 10px; color: rgba(255,255,255,0.25); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
+        #info { position: fixed; top: 6px; left: 10px; color: rgba(255,255,255,0.5); font-family: Arial; font-size: 9px; z-index: 10; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <video id="video" playsinline webkit-playsinline autoplay muted></video>
     <div id="credit">S.B Shehab</div>
+    <div id="info"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         const _k = 'aHR0cDovLzEwMy4xMy4xOTMuMTk0OjgwODIvVC1TUE9SVFMtSEQvdmlkZW8ubTN1OD90b2tlbj1SdXNyaVJNLUw3M0czMw==';
         const STREAM_URL = atob(_k);
         const video = document.getElementById('video');
-        let hls = null, played = false, recoveryAttempts = 0;
+        const info = document.getElementById('info');
+        let hls = null, played = false;
 
         function goFull() {
             const el = document.documentElement;
@@ -37,122 +40,166 @@
 
             if (Hls.isSupported()) {
                 hls = new Hls({
-                    // Performance
-                    lowLatencyMode: false,
-                    enableWorker: true,
+                    // 🔥 রিয়েল-টাইম পারফরম্যান্স (সর্বোচ্চ)
+                    liveSyncDurationCount: 1,
+                    liveMaxLatencyDurationCount: 3,
+                    lowLatencyMode: true,
                     
-                    // Buffer - কম রাখলেই আটকাবে না
-                    maxBufferLength: 10,
-                    maxMaxBufferLength: 20,
-                    backBufferLength: 30,
+                    // বাফার কম = রিয়েল-টাইমের কাছাকাছি
+                    maxBufferLength: 4,
+                    maxMaxBufferLength: 8,
+                    backBufferLength: 15,
+                    maxBufferSize: 4 * 1000 * 1000,
+                    maxBufferHole: 0.2,
                     
-                    // High Quality Force
-                    startLevel: -1, // অটো সিলেক্ট (সর্বোচ্চ নেবে)
-                    capLevelToPlayerSize: false, // প্লেয়ার সাইজ ইগনোর করে বেস্ট কোয়ালিটি
+                    // হাই কোয়ালিটি - ফোর্স
+                    startLevel: -1,
+                    capLevelToPlayerSize: false,
                     autoStartLoad: true,
+                    abrEwmaFastLive: 3.0,
+                    abrEwmaSlowLive: 9.0,
                     
-                    // Retry - আটকে গেলে দ্রুত রিকভারি
-                    manifestLoadingTimeOut: 10000,
-                    manifestLoadingMaxRetry: 999,
-                    manifestLoadingRetryDelay: 1000,
-                    levelLoadingTimeOut: 10000,
-                    levelLoadingMaxRetry: 999,
-                    levelLoadingRetryDelay: 1000,
-                    fragLoadingTimeOut: 10000,
+                    // কোয়ালিটি কমানোর আগে অনেক চেষ্টা করবে
+                    fragLoadingTimeOut: 30000,
                     fragLoadingMaxRetry: 999,
-                    fragLoadingRetryDelay: 1000,
+                    fragLoadingRetryDelay: 500,
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 999,
+                    manifestLoadingRetryDelay: 500,
+                    levelLoadingTimeOut: 30000,
+                    levelLoadingMaxRetry: 999,
+                    levelLoadingRetryDelay: 500,
                     
-                    // Stall detection বন্ধ
+                    // ব্যান্ডউইথ এস্টিমেট হাই রাখবে
+                    abrBandWidthFactor: 0.95,
+                    abrBandWidthUpFactor: 0.5,
+                    
+                    // স্টল টলারেন্স মিনিমাম
                     highBufferWatchdogPeriod: 0,
-                    
-                    // Network error handling
                     progressive: true,
+                    enableWorker: false,
                 });
 
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
+                
+                let lastStallTime = 0;
+                let stallCount = 0;
 
-                // MANIFEST পেয়েছে = শুরু
                 hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
                     console.log('✅ Manifest loaded | Levels:', data.levels.length);
                     
-                    // সর্বোচ্চ কোয়ালিটি সেট
                     if (data.levels.length > 0) {
                         const maxLevel = data.levels.length - 1;
                         hls.currentLevel = maxLevel;
-                        console.log('🎯 Quality set to:', data.levels[maxLevel].height + 'p');
+                        console.log('🎯 MAX quality:', data.levels[maxLevel].height + 'p', '| Bitrate:', (data.levels[maxLevel].bitrate/1000000).toFixed(1) + 'Mbps');
+                        info.textContent = data.levels[maxLevel].height + 'p ' + (data.levels[maxLevel].bitrate/1000000).toFixed(1) + 'Mbps';
                     }
                     
-                    // প্লে শুরু
                     video.muted = true;
-                    const playPromise = video.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            if (!played) { played = true; goFull(); }
-                            setTimeout(() => { video.muted = false; }, 800);
-                        }).catch(() => {
-                            // আবার ট্রাই
-                            setTimeout(() => {
-                                video.muted = true;
-                                video.play().then(() => {
-                                    if (!played) { played = true; goFull(); }
-                                    setTimeout(() => { video.muted = false; }, 800);
-                                }).catch(() => {});
-                            }, 500);
-                        });
-                    }
+                    video.play().then(() => {
+                        if (!played) { played = true; goFull(); }
+                        setTimeout(() => { video.muted = false; }, 1000);
+                    }).catch(() => {
+                        setTimeout(() => {
+                            video.muted = true;
+                            video.play().then(() => {
+                                if (!played) { played = true; goFull(); }
+                                setTimeout(() => { video.muted = false; }, 1000);
+                            }).catch(() => {});
+                        }, 500);
+                    });
                 });
 
-                // LEVEL SWITCHED = কোয়ালিটি চেঞ্জ হলে লগ
+                // 🔥 কোয়ালিটি সুইচ ট্র্যাকিং
                 hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
                     if (hls.levels[data.level]) {
-                        console.log('📺 Quality:', hls.levels[data.level].height + 'p');
+                        const lvl = hls.levels[data.level];
+                        console.log('📺 Quality:', lvl.height + 'p', '| Bitrate:', (lvl.bitrate/1000000).toFixed(1) + 'Mbps');
+                        info.textContent = lvl.height + 'p ' + (lvl.bitrate/1000000).toFixed(1) + 'Mbps';
                     }
                 });
 
-                // ERROR HANDLE
+                // 🔥 বাফার স্টল হলেই রিকভার
+                let recovering = false;
+                hls.on(Hls.Events.BUFFER_STALLED, () => {
+                    console.log('⏸️ Buffer stalled - immediate recovery');
+                    if (!recovering) {
+                        recovering = true;
+                        
+                        // এখন যে কোয়ালিটি আছে তার এক লেভেল কম
+                        const current = hls.currentLevel;
+                        if (current > 0) {
+                            hls.currentLevel = current - 1;
+                            console.log('⬇️ Fast recovery: lowered to', hls.levels[hls.currentLevel].height + 'p');
+                        }
+                        
+                        hls.recoverMediaError();
+                        setTimeout(() => { recovering = false; }, 2000);
+                    }
+                });
+
+                // 🔥 ভিডিও ইলিমেন্ট স্টল
+                video.addEventListener('stalled', () => {
+                    console.log('⏸️ Video stalled');
+                    lastStallTime = Date.now();
+                    stallCount++;
+                    
+                    // ২ সেকেন্ডে ২ বার স্টল = কোয়ালিটি কমাও
+                    if (stallCount >= 2 && hls.currentLevel > 0) {
+                        hls.currentLevel = hls.currentLevel - 1;
+                        console.log('⬇️ Stall recovery: lowered to', hls.levels[hls.currentLevel].height + 'p');
+                        stallCount = 0;
+                    }
+                    
+                    video.play().catch(() => {});
+                });
+                
+                video.addEventListener('playing', () => {
+                    // স্টল কাউন্ট রিসেট
+                    if (Date.now() - lastStallTime > 5000) {
+                        stallCount = 0;
+                    }
+                    console.log('▶️ Playing');
+                });
+
+                // 🔥 নন-ফেটাল এরর ইগনোর, ফেটাল হলেই রিস্টার্ট
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        switch(data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.log('🔄 Network error, retry #' + recoveryAttempts);
-                                recoveryAttempts++;
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.log('🔧 Media error, recovering...');
-                                recoveryAttempts++;
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                console.log('💀 Fatal error, restarting...');
-                                recoveryAttempts++;
-                                if (recoveryAttempts < 10) {
-                                    hls.destroy();
-                                    setTimeout(start, 1000);
-                                }
-                                break;
+                        console.log('💀 Fatal:', data.type, data.details);
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            hls.startLoad();
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            hls.recoverMediaError();
+                        } else {
+                            hls.destroy();
+                            setTimeout(start, 1000);
                         }
-                    } else {
-                        // Non-fatal error = ignore
-                        console.log('⚠️ Non-fatal error, continuing...');
                     }
                 });
 
-                // BUFFER STALLED = আটকে গেলে ফোর্স রিকভারি
-                hls.on(Hls.Events.BUFFER_STALLED, () => {
-                    console.log('⏸️ Buffer stalled, forcing recovery...');
-                    hls.recoverMediaError();
-                });
+                // 🔥 ২ মিনিট স্মুথ চললে অটো হাইয়েস্ট কোয়ালিটি আবার
+                let smoothTime = 0;
+                setInterval(() => {
+                    if (!video.paused && video.readyState >= 3) {
+                        smoothTime++;
+                        if (smoothTime >= 120 && hls.currentLevel < hls.levels.length - 1) {
+                            hls.currentLevel = hls.levels.length - 1;
+                            console.log('⬆️ Smooth playback: MAX quality restored');
+                            smoothTime = 0;
+                        }
+                    } else {
+                        smoothTime = 0;
+                    }
+                }, 1000);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari Native
                 video.src = STREAM_URL;
                 video.muted = true;
                 video.addEventListener('loadedmetadata', () => {
                     video.play().then(() => {
                         if (!played) { played = true; goFull(); }
-                        setTimeout(() => { video.muted = false; }, 800);
+                        setTimeout(() => { video.muted = false; }, 1000);
                     }).catch(() => {});
                 });
                 video.addEventListener('stalled', () => {
@@ -162,34 +209,17 @@
             }
         }
 
-        // Start with delay to ensure Hls.js loaded
         setTimeout(start, 500);
 
-        // User interaction = Fullscreen + Sound
         document.addEventListener('click', goFull);
         document.addEventListener('touchstart', goFull);
-        
-        // ভিডিও আটকে গেলে অটো রিকভারি
-        video.addEventListener('stalled', () => {
-            console.log('⏸️ Video stalled, recovering...');
-            if (hls) hls.recoverMediaError();
-            video.play().catch(() => {});
-        });
-        
-        video.addEventListener('waiting', () => {
-            console.log('⏳ Video waiting...');
-        });
-        
-        video.addEventListener('playing', () => {
-            console.log('▶️ Video playing');
-            recoveryAttempts = 0;
-        });
 
-        console.log('%c🚀 T Sports HD %c| %cS.B Shehab %c| HQ Ready',
-            'color:#e63946;font-weight:bold;font-size:16px;',
+        console.log('%c🔥 T Sports HD %c| %cRealtime Mode %c| %cS.B Shehab',
+            'color:#e63946;font-weight:bold;font-size:14px;',
             'color:#fff;',
-            'color:#f0c040;',
-            'color:#888;');
+            'color:#ff6b6b;',
+            'color:#fff;',
+            'color:#f0c040;');
     </script>
 </body>
 </html>
