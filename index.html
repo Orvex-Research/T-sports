@@ -3,300 +3,264 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>T-Sports HD Player Live</title>
-    <!-- Include hls.js for playing m3u8 files -->
+    <title>T-Sports HD Live</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         html, body {
-            margin: 0;
-            padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #000;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        /* Responsive Video Container - fits Mobile, PC, and TV */
         .video-container {
             position: relative;
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #000;
+            background: #000;
             cursor: pointer;
         }
 
         video {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* Keeps aspect ratio correct on PC, TV & Mobile */
-            outline: none;
+            object-fit: contain;
+            display: block;
         }
 
-        /* Watermark style - S.B shehab */
-        .watermark {
+        /* LIVE badge top-left */
+        .live-badge {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.35);
-            font-weight: 600;
-            letter-spacing: 1px;
-            z-index: 50;
-            pointer-events: none;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
-            background: rgba(0, 0, 0, 0.4);
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(5px);
-        }
-
-        /* Live indicator on top-left */
-        .live-indicator {
-            position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 14px;
+            left: 14px;
             display: flex;
             align-items: center;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 6px 12px;
+            gap: 7px;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(6px);
+            padding: 5px 12px;
             border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(5px);
-            z-index: 50;
             pointer-events: none;
+            z-index: 10;
+            transition: opacity 0.4s;
         }
-
         .live-dot {
-            width: 8px;
-            height: 8px;
-            background-color: #ef4444;
+            width: 8px; height: 8px;
+            background: #ef4444;
             border-radius: 50%;
-            animation: pulse 1.5s infinite;
+            animation: blink 1.4s infinite;
         }
-
         .live-text {
             color: #fff;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 700;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
-            letter-spacing: 1px;
         }
 
-        /* Autoplay instruction hint (fades out quickly) */
-        .tap-hint {
+        /* Watermark top-right */
+        .watermark {
             position: absolute;
-            bottom: 30px;
+            top: 14px;
+            right: 14px;
+            color: rgba(255,255,255,0.3);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+            z-index: 10;
+            background: rgba(0,0,0,0.4);
+            padding: 5px 12px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        /* Fullscreen hint bottom center (fades away) */
+        .hint {
+            position: absolute;
+            bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff;
-            padding: 10px 20px;
+            background: rgba(0,0,0,0.6);
+            color: rgba(255,255,255,0.75);
+            padding: 9px 20px;
             border-radius: 30px;
-            font-size: 14px;
-            font-weight: 500;
+            font-size: 13px;
             pointer-events: none;
-            z-index: 50;
-            opacity: 0.8;
-            transition: opacity 0.5s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            text-align: center;
+            z-index: 10;
+            transition: opacity 0.6s ease;
+            white-space: nowrap;
         }
 
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(1.2);
-                opacity: 0.5;
-            }
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
+        /* Muted indicator (shows briefly then fades) */
+        .muted-icon {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 13px;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
     </style>
 </head>
 <body>
 
-    <div class="video-container" id="video-container">
-        
-        <!-- Live Badge -->
-        <div class="live-indicator">
-            <div class="live-dot"></div>
-            <div class="live-text">Live</div>
-        </div>
+<div class="video-container" id="container">
 
-        <!-- Watermark / Credit -->
-        <div class="watermark">S.B shehab</div>
-        
-        <!-- Hint for Fullscreen & Sound -->
-        <div class="tap-hint" id="tap-hint">Tap anywhere for Fullscreen & Sound</div>
-
-        <!-- Video Player (Autoplays Muted initially to bypass browser blocks) -->
-        <video id="video" playsinline autoplay muted></video>
-
+    <!-- LIVE badge -->
+    <div class="live-badge">
+        <div class="live-dot"></div>
+        <div class="live-text">Live</div>
     </div>
 
-    <script>
-        var video = document.getElementById('video');
-        var container = document.getElementById('video-container');
-        var hint = document.getElementById('tap-hint');
-        var videoSrc = '/stream/T-SPORTS-HD/video.m3u8';
+    <!-- Watermark -->
+    <div class="watermark">S.B shehab</div>
 
-        var isStarted = false;
+    <!-- Hint: tap to fullscreen -->
+    <div class="hint" id="hint">Tap for Fullscreen</div>
 
-        // Load stream using hls.js or Native Player (Safari)
-        function initPlayer() {
-            if (Hls.isSupported()) {
-                var hls = new Hls({
-                    debug: false,
-                    enableWorker: true,
-                    lowLatencyMode: true
-                });
-                hls.loadSource(videoSrc);
-                hls.attachMedia(video);
-                
-                hls.on(Hls.Events.MANIFEST_LOADED, function(event, data) {
-                    // Force the stream to start loading at the highest quality level
-                    hls.startLevel = data.levels.length - 1;
-                });
-                
-                hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-                    // Force the absolute highest quality and disable auto-downgrade
-                    var highestLevel = data.levels.length - 1;
-                    hls.autoLevelEnabled = false;
-                    hls.currentLevel = highestLevel;
-                    hls.loadLevel = highestLevel;
-                    
-                    // Attempt autoplay (muted is highly allowed by all browsers)
-                    video.play().then(function() {
-                        isStarted = true;
-                    }).catch(function(e) {
-                        console.log("Autoplay blocked:", e);
-                    });
-                });
-                
-                hls.on(Hls.Events.ERROR, function(event, data) {
-                    if (data.fatal) {
-                        switch(data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                hls.destroy();
-                                break;
-                        }
-                    }
-                });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = videoSrc;
-                video.addEventListener('loadedmetadata', function() {
-                    video.play().then(function() {
-                        isStarted = true;
-                    }).catch(function(e) {
-                        console.log("Autoplay blocked:", e);
-                    });
-                });
-            }
+    <!-- Muted info -->
+    <div class="muted-icon" id="muted-icon">🔇 Tap to Unmute</div>
+
+    <!-- Video element: autoplay muted (works in all browsers without click) -->
+    <video id="video" autoplay muted playsinline></video>
+
+</div>
+
+<script>
+    var video   = document.getElementById('video');
+    var container = document.getElementById('container');
+    var hint    = document.getElementById('hint');
+    var mutedIcon = document.getElementById('muted-icon');
+    var videoSrc = '/stream/T-SPORTS-HD/video.m3u8';
+    var hls;
+
+    /* ─── Player Init ─── */
+    function initPlayer() {
+        if (Hls.isSupported()) {
+            hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                startLevel: -1 // will be overridden below
+            });
+            hls.loadSource(videoSrc);
+            hls.attachMedia(video);
+
+            hls.on(Hls.Events.MANIFEST_LOADED, function(event, data) {
+                // Force highest level from start
+                var topLevel = data.levels.length - 1;
+                hls.startLevel = topLevel;
+            });
+
+            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                var topLevel = data.levels.length - 1;
+                hls.autoLevelEnabled = false;
+                hls.currentLevel = topLevel;
+                hls.loadLevel   = topLevel;
+                // Play immediately (muted = browser allows)
+                video.play().catch(function(e){ console.log('autoplay err:', e); });
+            });
+
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (!data.fatal) return;
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    hls.startLoad();
+                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    hls.recoverMediaError();
+                } else {
+                    hls.destroy();
+                    setTimeout(initPlayer, 3000); // retry
+                }
+            });
+
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari native HLS
+            video.src = videoSrc;
+            video.addEventListener('loadedmetadata', function() {
+                video.play().catch(function(e){ console.log('autoplay err:', e); });
+            });
+        }
+    }
+
+    /* ─── Always Keep Playing (no pause) ─── */
+    video.addEventListener('pause', function() {
+        // Only force re-play if it was unintentional (not in the middle of a seek)
+        if (!video.seeking) {
+            video.play().catch(function(e){ console.log('replay err:', e); });
+        }
+    });
+
+    /* ─── 1-Click: Fullscreen Toggle ─── */
+    container.addEventListener('click', function(e) {
+        // If video is muted, unmute on first click
+        if (video.muted) {
+            video.muted = false;
         }
 
-        // Force play if paused (Always Play, No Pause Option)
-        video.addEventListener('pause', function() {
-            if (isStarted) {
-                video.play().catch(e => console.log(e));
+        toggleFullscreen();
+
+        // Hide the hint after first click
+        hint.style.opacity = '0';
+    });
+
+    function toggleFullscreen() {
+        var isFs = document.fullscreenElement || document.webkitFullscreenElement
+                 || document.mozFullScreenElement || document.msFullscreenElement;
+
+        if (!isFs) {
+            // Enter fullscreen
+            var req = container.requestFullscreen || container.webkitRequestFullscreen
+                    || container.mozRequestFullScreen || container.msRequestFullscreen;
+            if (req) req.call(container);
+
+            // Auto-rotate to landscape on mobile
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(function(){});
             }
-        });
-
-        // 1-Click to Fullscreen, Unmute, and Auto-Rotate to Landscape
-        container.addEventListener('click', function(e) {
-            // Don't trigger if clicking on native controls
-            if (e.target !== container && e.target !== video) return;
-
-            isStarted = true;
-
-            // Unmute the video
-            if (video.muted) {
-                video.muted = false;
-            }
-            video.play().catch(e => console.log(e));
-
-            // Toggle Fullscreen
-            toggleFullscreen();
-
-            // Hide the hint helper
-            hint.style.opacity = 0;
-        });
-
-        function toggleFullscreen() {
-            if (!document.fullscreenElement && !document.webkitFullscreenElement && 
-                !document.mozFullScreenElement && !document.msFullscreenElement) {
-                
-                // Request Fullscreen
-                if (container.requestFullscreen) {
-                    container.requestFullscreen();
-                } else if (container.webkitRequestFullscreen) {
-                    container.webkitRequestFullscreen();
-                } else if (container.mozRequestFullScreen) {
-                    container.mozRequestFullScreen();
-                } else if (container.msRequestFullscreen) {
-                    container.msRequestFullscreen();
-                }
-
-                // Lock screen orientation to Landscape on Mobile devices
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(function(err) {
-                        console.log("Orientation lock not supported:", err);
-                    });
-                }
-            } else {
-                // Exit Fullscreen
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.mozCancelFullScreen) {
-                    document.mozCancelFullScreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                }
-            }
+        } else {
+            // Exit fullscreen
+            var exit = document.exitFullscreen || document.webkitExitFullscreen
+                     || document.mozCancelFullScreen || document.msExitFullscreen;
+            if (exit) exit.call(document);
         }
+    }
 
-        // Enable native controls ONLY when in fullscreen mode for clean non-fullscreen UX
-        function handleFullscreenChange() {
-            var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || 
-                               document.mozFullScreenElement || document.msFullscreenElement;
-            if (isFullscreen) {
-                video.controls = true;
-                hint.style.opacity = 0;
-            } else {
-                video.controls = false;
-            }
-        }
+    /* ─── Show muted hint briefly on load ─── */
+    window.addEventListener('DOMContentLoaded', function() {
+        initPlayer();
 
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-        document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+        // Show muted icon for 3s then fade
+        mutedIcon.style.display = 'block';
+        setTimeout(function() {
+            mutedIcon.style.transition = 'opacity 0.8s';
+            mutedIcon.style.opacity = '0';
+            setTimeout(function() { mutedIcon.style.display = 'none'; }, 800);
+        }, 3000);
 
-        // Initialize player on page load
-        window.addEventListener('DOMContentLoaded', initPlayer);
-    </script>
+        // Fade hint after 5s
+        setTimeout(function() {
+            hint.style.opacity = '0.5';
+        }, 5000);
+    });
+</script>
+
 </body>
 </html>
