@@ -2,101 +2,338 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T-Sports HD Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>T-Sports HD Player Live</title>
     <!-- Include hls.js for playing m3u8 files -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Responsive Video Container - fits Mobile, PC, and TV */
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Keeps aspect ratio correct on PC, TV & Mobile */
+            outline: none;
+        }
+
+        /* Premium Glassmorphic Overlay for Autoplay & Fullscreen */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            cursor: pointer;
+            transition: opacity 0.4s ease;
+        }
+
+        .play-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding-top: 50px;
-            height: 100vh;
-            margin: 0;
-            box-sizing: border-box;
+            max-width: 90%;
         }
-        h2 {
-            margin-bottom: 10px;
-            color: #38bdf8;
-        }
-        .video-container {
-            width: 90%;
-            max-width: 900px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 2px solid #1e293b;
-        }
-        video {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        .warning {
-            background-color: #7f1d1d;
-            border: 1px solid #dc2626;
-            color: #fca5a5;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            max-width: 80%;
+
+        /* Pulsing Live Badge */
+        .live-badge {
+            background-color: #ef4444;
+            color: #fff;
+            padding: 6px 16px;
             font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-radius: 50px;
+            letter-spacing: 2px;
+            margin-bottom: 25px;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+        }
+
+        .play-button {
+            width: 80px;
+            height: 80px;
+            background: #ef4444;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .play-button svg {
+            width: 35px;
+            height: 35px;
+            fill: #fff;
+            margin-left: 5px;
+        }
+
+        .play-card:hover .play-button {
+            transform: scale(1.1);
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.7);
+        }
+
+        .title {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 10px 0;
+            letter-spacing: 0.5px;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        /* Watermark style - S.B shehab */
+        .watermark {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.35);
+            font-weight: 600;
+            letter-spacing: 1px;
+            z-index: 50;
+            pointer-events: none;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 15px rgba(239, 68, 68, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+
+        /* Custom Floating Fullscreen trigger for backup */
+        .fullscreen-trigger {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 50;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .video-container:hover .fullscreen-trigger {
+            opacity: 1;
+        }
+
+        /* Hide controls when in clean TV/PC mode */
+        video::-webkit-media-controls-panel {
+            background-image: linear-gradient(transparent, rgba(0,0,0,0.7)) !important;
         }
     </style>
 </head>
 <body>
 
-    <h2>T-Sports HD Player</h2>
-    
-    <div class="warning" id="warning-msg" style="display: none;">
-        <strong>Mixed Content Error:</strong> This site is loaded over HTTPS, but the video stream is HTTP. 
-        Your browser will block the video. It will only work locally or on an HTTP server.
-    </div>
+    <div class="video-container" id="video-container">
+        
+        <!-- Watermark / Credit -->
+        <div class="watermark">S.B shehab</div>
+        
+        <!-- Tap/Click to watch live overlay -->
+        <div class="overlay" id="play-overlay" onclick="startStream()">
+            <div class="play-card">
+                <div class="live-badge">Live</div>
+                <div class="play-button">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </div>
+                <div class="title">T-SPORTS HD</div>
+                <div class="subtitle">Tap to watch in Fullscreen</div>
+                <div style="font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 15px;">Credit: S.B shehab</div>
+            </div>
+        </div>
 
-    <div class="video-container">
-        <video id="video" controls autoplay></video>
+        <!-- Video Player -->
+        <video id="video" playsinline controls autoplay muted></video>
+
+        <!-- Backup Floating Fullscreen Button -->
+        <button class="fullscreen-trigger" onclick="toggleFullscreen()">Fullscreen</button>
+
     </div>
 
     <script>
         var video = document.getElementById('video');
+        var container = document.getElementById('video-container');
         var videoSrc = '/stream/T-SPORTS-HD/video.m3u8';
-        
-        // Show warning if trying to load HTTP stream on HTTPS site (like GitHub Pages)
-        if (window.location.protocol === 'https:' && videoSrc.startsWith('http:')) {
-            document.getElementById('warning-msg').style.display = 'block';
+
+        // Load stream using hls.js or Native Player (Safari)
+        function initPlayer() {
+            if (Hls.isSupported()) {
+                var hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true
+                });
+                hls.loadSource(videoSrc);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                    // Always try to load the highest quality available
+                    var highestLevel = data.levels.length - 1;
+                    hls.currentLevel = highestLevel;
+                    
+                    // Attempt muted autoplay (highly supported by browsers)
+                    video.play().catch(function(e) {
+                        console.log("Autoplay blocked:", e);
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log("Fatal network error encountered, trying to recover");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log("Fatal media error encountered, trying to recover");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                console.error("Fatal HLS error, destroying player:", data);
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = videoSrc;
+                video.addEventListener('loadedmetadata', function() {
+                    video.play().catch(function(e) {
+                        console.log("Autoplay blocked:", e);
+                    });
+                });
+            }
         }
 
-        // Initialize hls.js
-        if (Hls.isSupported()) {
-            var hls = new Hls({
-                debug: false
-            });
-            hls.loadSource(videoSrc);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-                // Force highest quality available
-                var highestLevel = data.levels.length - 1;
-                hls.currentLevel = highestLevel;
+        // 1-Touch Play, Unmute, Fullscreen & Auto-Rotate to Landscape
+        function startStream() {
+            // Unmute the video
+            video.muted = false;
+            video.play().catch(e => console.log(e));
+
+            // Request Fullscreen
+            if (container.requestFullscreen) {
+                container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+                container.webkitRequestFullscreen();
+            } else if (container.mozRequestFullScreen) {
+                container.mozRequestFullScreen();
+            } else if (container.msRequestFullscreen) {
+                container.msRequestFullscreen();
+            }
+
+            // Lock screen orientation to Landscape on Mobile
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(function(err) {
+                    console.log("Orientation lock not supported:", err);
+                });
+            }
+
+            // Hide the play overlay
+            document.getElementById('play-overlay').style.opacity = 0;
+            setTimeout(function() {
+                document.getElementById('play-overlay').style.display = 'none';
+            }, 400);
+        }
+
+        // Toggle Fullscreen manually (backup button / double tap)
+        function toggleFullscreen() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                }
                 
-                video.play().catch(e => console.log("Autoplay blocked:", e));
-            });
-            hls.on(Hls.Events.ERROR, function(event, data) {
-                console.error('HLS error:', data);
-            });
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(e => console.log(e));
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
         }
-        // Fallback for Safari which has built-in HLS support
-        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = videoSrc;
-            video.addEventListener('loadedmetadata', function() {
-                video.play().catch(e => console.log("Autoplay blocked:", e));
-            });
-        }
+
+        // Double click/tap on video to toggle fullscreen
+        video.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            toggleFullscreen();
+        });
+
+        // Initialize player on page load
+        window.addEventListener('DOMContentLoaded', initPlayer);
     </script>
 </body>
 </html>
