@@ -1,30 +1,62 @@
-
 <!DOCTYPE html>
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>টি-স্পোর্টস এইচডি লাইভ</title>
-    <!-- Video.js স্টাইল এবং স্ক্রিপ্ট -->
-    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>T Sports HD Player</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .video-container { width: 100%; max-width: 800px; }
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; }
+        video { width: 100vw; height: 100vh; object-fit: contain; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; cursor: pointer; }
+        /* ক্রেডিট লেখা আরও ছোট করা হয়েছে */
+        #credit { position: fixed; bottom: 5px; right: 10px; color: rgba(255, 255, 255, 0.3); font-family: sans-serif; font-size: 8px; z-index: 20; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div class="video-container">
-        <video id="my-video" class="video-js vjs-big-play-centered" controls preload="auto" width="100%" height="auto">
-            <source src="http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33" type="application/x-mpegURL">
-            আপনার ব্রাউজার ভিডিওটি সমর্থন করছে না।
-        </video>
-    </div>
+    <video id="video" playsinline webkit-playsinline autoplay muted></video>
+    <div id="credit">S.B Shehab</div>
+    <div id="overlay"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
-        // প্লেয়ার ইনিশিয়ালাইজ করা
-        var player = videojs('my-video');
+        const STREAM_URL = 'http://103.13.193.194:8082/T-SPORTS-HD/video.m3u8?token=RusriRM-L73G33';
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+
+        function activateExperience() {
+            // সাউন্ড চালু করা
+            video.muted = false;
+            
+            // ফুলস্ক্রিন রিকোয়েস্ট
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) doc.requestFullscreen();
+            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+
+            // ল্যান্ডস্কেপ মোড নিশ্চিত করা
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
+        }
+
+        function startPlayer() {
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(STREAM_URL);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {});
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = STREAM_URL;
+                video.play().catch(() => {});
+            }
+        }
+
+        startPlayer();
+
+        // প্রতিবার ক্লিকেই ল্যান্ডস্কেপ ও ফুলস্ক্রিন কমান্ড কার্যকর হবে
+        overlay.addEventListener('click', activateExperience);
     </script>
 </body>
 </html>
