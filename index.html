@@ -38,10 +38,9 @@
 </head>
 <body>
 
-    <video id="video" playsinline webkit-playsinline muted autoplay></video>
+    <video id="video" playsinline webkit-playsinline autoplay></video>
     <div id="credit">S.B Shehab</div>
 
-    <!-- HLS.js - Stable Version -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     
     <script>
@@ -50,8 +49,9 @@
 
         const video = document.getElementById('video');
         let hls = null;
+        let soundUnlocked = false;
 
-        // ========== ফুলস্ক্রিন ফোর্স ==========
+        // ========== ফুলস্ক্রিন ==========
         function goFullscreen() {
             const el = document.documentElement;
             try {
@@ -64,19 +64,30 @@
                 }
             } catch(e) {}
             
-            // ল্যান্ডস্কেপ লক
             try {
                 if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('landscape');
                 }
             } catch(e) {}
+            
+            // ফুলস্ক্রিন বা ক্লিকের পর সাউন্ড আনমিউট
+            unlockSound();
         }
 
-        // ========== HLS Player Setup ==========
+        // ========== সাউন্ড আনলক ==========
+        function unlockSound() {
+            if (!soundUnlocked) {
+                video.muted = false;
+                video.volume = 1.0;
+                soundUnlocked = true;
+                console.log('🔊 Sound Unlocked');
+            }
+        }
+
+        // ========== HLS Player ==========
         function setupPlayer() {
             if (typeof Hls === 'undefined') {
-                // HLS.js লোড না হলে ২ সেকেন্ড পর আবার ট্রাই
-                setTimeout(setupPlayer, 2000);
+                setTimeout(setupPlayer, 1000);
                 return;
             }
 
@@ -88,44 +99,39 @@
                     manifestLoadingTimeOut: 20000,
                     manifestLoadingMaxRetry: 5,
                     levelLoadingTimeOut: 20000,
-                    levelLoadingMaxRetry: 5,
                     fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 5
+                    fragLoadingMaxRetry: 5,
+                    // অডিও ট্র্যাক অটো সিলেক্ট
+                    autoStartLoad: true,
+                    startLevel: -1
                 });
 
                 hls.loadSource(STREAM_URL);
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    // ম্যানিফেস্ট পেয়েছে, এখন প্লে করো
-                    video.muted = false;
-                    const playPromise = video.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            goFullscreen();
-                        }).catch(() => {
-                            // অটোপ্লে ব্লক হলে muted করে ট্রাই
-                            video.muted = true;
-                            video.play().then(() => goFullscreen()).catch(() => {});
-                        });
-                    }
+                    // প্রথমে muted দিয়ে প্লে শুরু
+                    video.muted = true;
+                    video.play().then(() => {
+                        goFullscreen();
+                        // ৫০০ মিলিসেকেন্ড পর আনমিউট
+                        setTimeout(unlockSound, 500);
+                    }).catch(() => {
+                        goFullscreen();
+                    });
                 });
 
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
                         switch(data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.log('Network error, retrying...');
                                 hls.startLoad();
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.log('Media error, recovering...');
                                 hls.recoverMediaError();
                                 break;
                             default:
-                                console.log('Fatal error, trying direct play...');
                                 hls.destroy();
-                                // সরাসরি ভিডিও সোর্স হিসেবে ট্রাই
                                 tryDirectPlay();
                                 break;
                         }
@@ -133,40 +139,49 @@
                 });
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari/iOS Native HLS
                 video.src = STREAM_URL;
+                video.muted = true;
                 video.addEventListener('loadedmetadata', () => {
-                    video.play().then(() => goFullscreen()).catch(() => {
-                        video.muted = true;
-                        video.play().then(() => goFullscreen()).catch(() => {});
-                    });
+                    video.play().then(() => {
+                        goFullscreen();
+                        setTimeout(unlockSound, 500);
+                    }).catch(() => {});
                 });
             } else {
-                // কিছুই সাপোর্ট না করলে সরাসরি ট্রাই
                 tryDirectPlay();
             }
         }
 
-        // ========== Direct Play Fallback ==========
         function tryDirectPlay() {
             video.src = STREAM_URL;
             video.muted = true;
             video.load();
-            video.play().then(() => goFullscreen()).catch(() => {});
+            video.play().then(() => {
+                goFullscreen();
+                setTimeout(unlockSound, 500);
+            }).catch(() => {});
         }
 
         // ========== Start ==========
-        // পেজ লোড হওয়ার ১ সেকেন্ড পর শুরু (HLS.js লোডের জন্য)
         setTimeout(setupPlayer, 1000);
 
-        // ক্লিক/টাচ করলেও ফুলস্ক্রিন নিশ্চিত
-        document.addEventListener('click', goFullscreen);
-        document.addEventListener('touchstart', goFullscreen);
+        // ক্লিক/টাচ = ফুলস্ক্রিন + সাউন্ড
+        document.addEventListener('click', () => {
+            goFullscreen();
+            unlockSound();
+        });
         
-        // যেকোনো কী প্রেসে ফুলস্ক্রিন
-        document.addEventListener('keydown', goFullscreen);
+        document.addEventListener('touchstart', () => {
+            goFullscreen();
+            unlockSound();
+        });
+        
+        document.addEventListener('keydown', () => {
+            goFullscreen();
+            unlockSound();
+        });
 
-        console.log('%c📺 T Sports HD %c| %cS.B Shehab %c| Ready',
+        console.log('%c📺 T Sports HD %c| %cS.B Shehab %c| Sound Ready',
             'color:#e63946;font-weight:bold;',
             'color:#fff;',
             'color:#f0c040;',
